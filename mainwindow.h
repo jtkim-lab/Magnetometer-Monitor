@@ -13,6 +13,8 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = 0);
+    void receiveValue();
+
     ~MainWindow();
 
 private:

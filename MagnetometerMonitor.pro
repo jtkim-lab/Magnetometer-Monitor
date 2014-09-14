@@ -18,3 +18,6 @@ SOURCES += main.cpp\
 HEADERS  += mainwindow.h
 
 FORMS    += mainwindow.ui
+
+mac: LIBS += -framework QtSerialPort
+else:unix|win32: LIBS += -lQtSerialPort
