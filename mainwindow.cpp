@@ -1,15 +1,23 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QtSerialPort/QSerialPort>
-
-#define MAXSIZE 6
-
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    serial = new QSerialPort(this);
+    graph = ui->widget;
+
+    initGraph();
+
+    ui->connectButton->setEnabled(true);
+    ui->disconnectButton->setEnabled(false);
+
+    connect(ui->connectButton, SIGNAL(clicked()), this, SLOT(on_connect_clicked()));
+    connect(ui->disconnectButton, SIGNAL(clicked()), this, SLOT(on_disconnect_clicked()));
+    connect(serial, SIGNAL(readyRead()), this, SLOT(readData()));
 }
 
 MainWindow::~MainWindow()
@@ -17,90 +25,153 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::receiveValue()
+void MainWindow::on_connect_clicked()
 {
+    serial->setPortName(QString("/dev/tty.SLAB_USBtoUART"));
+    serial->setDataBits(QSerialPort::Data8);
+    serial->setParity(QSerialPort::NoParity);
+    serial->setBaudRate(QSerialPort::Baud57600);
+    serial->setStopBits(QSerialPort::OneStop);
+    serial->setFlowControl(QSerialPort::NoFlowControl);
+
+    if (serial->open(QIODevice::ReadOnly))
+    {
+        ui->connectButton->setEnabled(false);
+        ui->disconnectButton->setEnabled(true);
+    }
+    else
+    {
+        QMessageBox::critical(this, tr("Error"), tr("Fail to Connect"));
+    }
+}
+
+void MainWindow::on_disconnect_clicked()
+{
+    serial->close();
+
+    ui->connectButton->setEnabled(true);
+    ui->disconnectButton->setEnabled(false);
+}
+
+void MainWindow::readData()
+{
+    QByteArray data = serial->readAll();
+
+    magXVec.pop_back();
+    magYVec.pop_back();
+    magZVec.pop_back();
+
     QLabel *xData = findChild<QLabel *>("label_5");
     QLabel *yData = findChild<QLabel *>("label_6");
     QLabel *zData = findChild<QLabel *>("label_7");
 
-    QString portName = "/dev/tty.SLAB_USBtoUART";
+    int i = 0;
 
-    QSerialPort* serialPort1 = new QSerialPort(portName);
-
-    serialPort1->setDataBits(QSerialPort::Data8);
-    serialPort1->setParity(QSerialPort::NoParity);
-    serialPort1->setBaudRate(QSerialPort::Baud57600);
-    serialPort1->setStopBits(QSerialPort::OneStop);
-    serialPort1->setFlowControl(QSerialPort::NoFlowControl);
-
-    char receivedData[1000];//MAXSIZE*3+4];
-
-    char storedDataX[MAXSIZE+1];
-    char storedDataY[MAXSIZE+1];
-    char storedDataZ[MAXSIZE+1];
-
-    bool temp = true;
-
-    while(temp)
+    while(1)
     {
-        if(serialPort1->open(QIODevice::ReadWrite))
+        if(data[i] == '\r')
         {
-//            serialPort1->read(receivedData, 1);
+            i++;
 
-//            while(receivedData[0] != '\n')
-//            {
-//                serialPort1->open(QIODevice::ReadWrite);
-//                serialPort1->read(receivedData, 1);
-//            }
-
-//            serialPort1->open(QIODevice::ReadWrite);
-       //     QByteArray receivedData;
-            QByteArray receivedData = serialPort1->readAll();//MAXSIZE*3+4);
-         //   int i = 0;
-
-            receivedData[999] = '/0';
-
-            xData->setText(receivedData);
-
-//            for(i = 0; i != 22 && receivedData[i] != '\n'; i++);
-
-  //          if(i != 22)
-    //        {
-   /*         storedDataX[0] = receivedData[i+1];
-            storedDataX[1] = receivedData[i+2];
-            storedDataX[2] = receivedData[i+3];
-            storedDataX[3] = receivedData[i+4];
-            storedDataX[4] = receivedData[i+5];
-            storedDataX[5] = receivedData[i+6];
-            storedDataX[6] = '\0';
-
-            xData->setText(storedDataX);
-            }
-            else
+            if(data[i] == '\n')
             {
+                i++;
                 break;
-            }*/
-/*            storedDataY[0] = receivedData[7];
-            storedDataY[1] = receivedData[8];
-            storedDataY[2] = receivedData[9];
-            storedDataY[3] = receivedData[10];
-            storedDataY[4] = receivedData[11];
-            storedDataY[5] = receivedData[12];
-            storedDataY[6] = '\0';
-
-            yData->setText(storedDataY);
-
-            storedDataZ[0] = receivedData[14];
-            storedDataZ[1] = receivedData[15];
-            storedDataZ[2] = receivedData[16];
-            storedDataZ[3] = receivedData[17];
-            storedDataZ[4] = receivedData[18];
-            storedDataZ[5] = receivedData[19];
-            storedDataZ[6] = '\0';
-
-            zData->setText(storedDataZ);*/
-
-            temp = false;
+            }
         }
+
+        i++;
+    }
+
+    storedDataX[0] = data[i+0];
+    storedDataX[1] = data[i+1];
+    storedDataX[2] = data[i+2];
+    storedDataX[3] = data[i+3];
+    storedDataX[4] = data[i+4];
+    storedDataX[5] = data[i+5];
+    storedDataX[6] = '\0';
+
+    xData->setText(storedDataX);
+    magXVec.push_front(atof(storedDataX));
+
+    storedDataY[0] = data[i+7];
+    storedDataY[1] = data[i+8];
+    storedDataY[2] = data[i+9];
+    storedDataY[3] = data[i+10];
+    storedDataY[4] = data[i+11];
+    storedDataY[5] = data[i+12];
+    storedDataY[6] = '\0';
+
+    yData->setText(storedDataY);
+    magYVec.push_front(atof(storedDataY));
+
+    storedDataZ[0] = data[i+14];
+    storedDataZ[1] = data[i+15];
+    storedDataZ[2] = data[i+16];
+    storedDataZ[3] = data[i+17];
+    storedDataZ[4] = data[i+18];
+    storedDataZ[5] = data[i+19];
+    storedDataZ[6] = '\0';
+
+    zData->setText(storedDataZ);
+    magZVec.push_front(atof(storedDataZ));
+
+    graph->graph(0)->setData(magTVec, magXVec);
+    graph->graph(1)->setData(magTVec, magYVec);
+    graph->graph(2)->setData(magTVec, magZVec);
+    graph->replot();
+
+    sleep(1);
+}
+
+void MainWindow::initGraph()
+{
+    graph->addGraph();
+    graph->addGraph();
+    graph->addGraph();
+
+    graph->graph(0)->setPen(QPen(QColor(255,0,0,255)));
+    graph->graph(1)->setPen(QPen(QColor(0,255,0,255)));
+    graph->graph(2)->setPen(QPen(QColor(0,0,255,255)));
+
+    graph->xAxis->setLabel("time");
+    graph->yAxis->setLabel("value");
+
+    graph->xAxis->setRange(0, 10);
+    graph->yAxis->setRange(-260, 260);
+
+
+    magTVec.resize(DATANUM);
+    magXVec.resize(DATANUM);
+    magYVec.resize(DATANUM);
+    magZVec.resize(DATANUM);
+
+    for(int i = 0; i < DATANUM; i++)
+    {
+        magTVec[i] = (double) i / (double) DATANUM * 10.0;
+
+        magXVec.pop_back();
+        magYVec.pop_back();
+        magZVec.pop_back();
+
+        magXVec.push_front(100.0);
+        magYVec.push_front(0.0);
+        magZVec.push_front(-100.0);
+    }
+
+    graph->graph(0)->setData(magTVec, magXVec);
+    graph->graph(1)->setData(magTVec, magYVec);
+    graph->graph(2)->setData(magTVec, magZVec);
+
+    graph->replot();
+}
+
+void MainWindow::shiftData(QVector<double> vecX, QVector<double> vecY, QVector<double> vecZ)
+{
+    for(int i = DATANUM-1; i > 0; i--)
+    {
+        vecX[i] = vecX[i-1];
+        vecY[i] = vecY[i-1];
+        vecZ[i] = vecZ[i-1];
     }
 }
