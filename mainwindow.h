@@ -10,6 +10,7 @@
 
 #define MAXSIZE 6
 #define DATANUM 1000
+#define GRAPHYRANGE 500
 
 namespace Ui {
 class MainWindow;
@@ -37,6 +38,7 @@ private:
     QVector<double> magXVec;
     QVector<double> magYVec;
     QVector<double> magZVec;
+    QMutex mutex;
 
     char storedDataX[MAXSIZE+1];
     char storedDataY[MAXSIZE+1];

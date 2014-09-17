@@ -33,6 +33,7 @@ void MainWindow::on_connect_clicked()
     serial->setBaudRate(QSerialPort::Baud57600);
     serial->setStopBits(QSerialPort::OneStop);
     serial->setFlowControl(QSerialPort::NoFlowControl);
+    serial->setReadBufferSize(60);
 
     if (serial->open(QIODevice::ReadOnly))
     {
@@ -55,44 +56,35 @@ void MainWindow::on_disconnect_clicked()
 
 void MainWindow::readData()
 {
-    QByteArray data = serial->readAll();
+    QByteArray data = serial->read(60);
 
-    magXVec.pop_back();
-    magYVec.pop_back();
-    magZVec.pop_back();
+    int size = data.size() - 30;
 
     QLabel *xData = findChild<QLabel *>("label_5");
     QLabel *yData = findChild<QLabel *>("label_6");
     QLabel *zData = findChild<QLabel *>("label_7");
 
     int i = 0;
+    bool b = false;
 
-    while(1)
+    if(size == -7)
     {
-        if(data[i] == '\r')
+        if(data[0] == '-' || data[0] == '0')
         {
-            i++;
+            magXVec.pop_back();
+            magYVec.pop_back();
+            magZVec.pop_back();
 
-            if(data[i] == '\n')
-            {
-                i++;
-                break;
-            }
-        }
+            storedDataX[0] = data[i+0];
+            storedDataX[1] = data[i+1];
+            storedDataX[2] = data[i+2];
+            storedDataX[3] = data[i+3];
+            storedDataX[4] = data[i+4];
+            storedDataX[5] = data[i+5];
+            storedDataX[6] = '\0';
 
-        i++;
-    }
-
-    storedDataX[0] = data[i+0];
-    storedDataX[1] = data[i+1];
-    storedDataX[2] = data[i+2];
-    storedDataX[3] = data[i+3];
-    storedDataX[4] = data[i+4];
-    storedDataX[5] = data[i+5];
-    storedDataX[6] = '\0';
-
-    xData->setText(storedDataX);
-    magXVec.push_front(atof(storedDataX));
+            xData->setText(storedDataX);
+            magXVec.push_front(atof(storedDataX));
 
     storedDataY[0] = data[i+7];
     storedDataY[1] = data[i+8];
@@ -120,8 +112,80 @@ void MainWindow::readData()
     graph->graph(1)->setData(magTVec, magYVec);
     graph->graph(2)->setData(magTVec, magZVec);
     graph->replot();
+        }
+    }
 
-    sleep(1);
+    while(!b && size >= i && data.size() == serial->readBufferSize())
+    {
+        if(data[i] == '\r')
+        {
+            i++;
+
+            if(data[i] == '\n')
+            {
+                i++;
+                b = true;
+            }
+            else
+                i++;
+        }
+        else
+            i++;
+    }
+
+    mutex.lock();
+
+    if(b && size >= i && data.size() == serial->readBufferSize())
+    {
+        if(data[i+0] == '-' || data[i+0] == '0')
+        {
+            magXVec.pop_back();
+            magYVec.pop_back();
+            magZVec.pop_back();
+
+            storedDataX[0] = data[i+0];
+            storedDataX[1] = data[i+1];
+            storedDataX[2] = data[i+2];
+            storedDataX[3] = data[i+3];
+            storedDataX[4] = data[i+4];
+            storedDataX[5] = data[i+5];
+            storedDataX[6] = '\0';
+
+            xData->setText(storedDataX);
+            magXVec.push_front(atof(storedDataX));
+
+    storedDataY[0] = data[i+7];
+    storedDataY[1] = data[i+8];
+    storedDataY[2] = data[i+9];
+    storedDataY[3] = data[i+10];
+    storedDataY[4] = data[i+11];
+    storedDataY[5] = data[i+12];
+    storedDataY[6] = '\0';
+
+    yData->setText(storedDataY);
+    magYVec.push_front(atof(storedDataY));
+
+    storedDataZ[0] = data[i+14];
+    storedDataZ[1] = data[i+15];
+    storedDataZ[2] = data[i+16];
+    storedDataZ[3] = data[i+17];
+    storedDataZ[4] = data[i+18];
+    storedDataZ[5] = data[i+19];
+    storedDataZ[6] = '\0';
+
+    zData->setText(storedDataZ);
+    magZVec.push_front(atof(storedDataZ));
+
+    graph->graph(0)->setData(magTVec, magXVec);
+    graph->graph(1)->setData(magTVec, magYVec);
+    graph->graph(2)->setData(magTVec, magZVec);
+    graph->replot();
+    }
+    }
+
+    mutex.unlock();
+    //serial->clear();
+    //sleep(1);
 }
 
 void MainWindow::initGraph()
@@ -138,7 +202,7 @@ void MainWindow::initGraph()
     graph->yAxis->setLabel("value");
 
     graph->xAxis->setRange(0, 10);
-    graph->yAxis->setRange(-260, 260);
+    graph->yAxis->setRange(-GRAPHYRANGE, GRAPHYRANGE);
 
 
     magTVec.resize(DATANUM);
